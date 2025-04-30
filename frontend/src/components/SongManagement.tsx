@@ -73,7 +73,6 @@ export default function SongManager() {
                 const albumsData: Album[] = await albumsResponse.json();
                 const songsData: any[] = await songsResponse.json();
 
-                // Kiểm tra và chuẩn hóa dữ liệu bài hát
                 const normalizedSongs: Song[] = songsData.map(song => ({
                     id: song.id,
                     name: song.name || "Không xác định",
@@ -122,20 +121,27 @@ export default function SongManager() {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            if (!file.type.startsWith("audio/")) {
-                setError("Vui lòng chọn file âm thanh (mp3, wav, v.v.)!");
+            if (!file.type.startsWith("audio/") && file.type !== "video/mp4") {
+                setError("Vui lòng chọn file âm thanh (mp3, wav, v.v.) hoặc video (mp4)!");
                 return;
             }
             setFormData((prev) => ({ ...prev, audio_file: file }));
             setAudioPreview(URL.createObjectURL(file));
 
             // Calculate duration
-            const audio = new Audio(URL.createObjectURL(file));
-            audio.addEventListener('loadedmetadata', () => {
-                const durationInSeconds = Math.floor(audio.duration);
-                setAudioDuration(durationInSeconds);
-                audio.remove(); // Clean up
-            });
+            const media = file.type.startsWith("audio/") ? new Audio(URL.createObjectURL(file)) : new window.HTMLVideoElement();
+            if (media instanceof HTMLAudioElement || media instanceof HTMLVideoElement) {
+                media.addEventListener('loadedmetadata', () => {
+                    const durationInSeconds = Math.floor(media.duration);
+                    setAudioDuration(durationInSeconds);
+                    if (media instanceof HTMLAudioElement) {
+                        media.remove(); // Clean up for audio
+                    }
+                });
+                if (media instanceof HTMLVideoElement) {
+                    media.src = URL.createObjectURL(file);
+                }
+            }
 
             setError(null);
         }
@@ -155,7 +161,7 @@ export default function SongManager() {
             return;
         }
         if (!formData.audio_file && !editingSongId) {
-            setError("Vui lòng chọn file âm thanh!");
+            setError("Vui lòng chọn file âm thanh hoặc video!");
             return;
         }
         if (formData.premium === null || formData.premium === undefined) {
@@ -174,7 +180,7 @@ export default function SongManager() {
         if (formData.album !== null) {
             formPayload.append("album", String(formData.album));
         }
-        formPayload.append("duration", String(audioDuration)); // Use calculated duration
+        formPayload.append("duration", String(audioDuration));
         formPayload.append("status", String(formData.status));
         formPayload.append("premium", String(formData.premium));
         formPayload.append("lyrics", formData.lyrics);
@@ -209,7 +215,7 @@ export default function SongManager() {
         setFormData({ title: "", artist: null, album: null, audio_file: null, status: 1, premium: 0, lyrics:"" });
         setEditingSongId(null);
         setAudioPreview(null);
-        setAudioDuration(1); // Reset duration
+        setAudioDuration(1);
         setIsFormVisible(false);
         setError(null);
     };
@@ -226,7 +232,7 @@ export default function SongManager() {
         });
         setEditingSongId(song.id);
         setAudioPreview(song.song_url ? `${BASE_URL}/audio/${song.song_url}` : null);
-        setAudioDuration(song.duration); // Set duration for editing
+        setAudioDuration(song.duration);
         setIsFormVisible(true);
     };
 
@@ -352,18 +358,9 @@ export default function SongManager() {
                                     <option value={1}>Premium</option>
                                 </select>
                             </div>
-                            
+
                             <div>
                                 <label className="block mb-1 font-medium text-gray-300">Lời bài hát</label>
-                                {/* <input
-                                    type="text"
-                                    name="lyric"
-                                    value={formData.lyrics}
-                                    onChange={handleInputChange}
-                                    required
-                                    className="w-full p-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none"
-                                    placeholder="Nhập tên bài hát"
-                                /> */}
                                 <textarea
                                     name="lyrics"
                                     value={formData.lyrics}
@@ -376,11 +373,11 @@ export default function SongManager() {
                             </div>
 
                             <div>
-                                <label className="block mb-1 font-medium text-gray-300">File âm thanh</label>
+                                <label className="block mb-1 font-medium text-gray-300">File âm thanh hoặc video</label>
                                 <div className="relative">
                                     <input
                                         type="file"
-                                        accept="audio/*"
+                                        accept="audio/*,video/mp4"
                                         onChange={handleFileChange}
                                         className="w-full p-2 bg-gray-800 border border-gray-700 rounded-lg text-white file:mr-4 file:py-1 file:px-3 file:bg-green-600 file:text-white file:rounded-md file:border-0 hover:file:bg-green-500"
                                     />
@@ -399,7 +396,7 @@ export default function SongManager() {
                                 )}
                                 {audioPreview && (
                                     <audio controls className="w-full mt-2">
-                                        <source src={audioPreview} type="audio/mpeg" />
+                                        <source src={audioPreview} type={formData.audio_file instanceof File ? formData.audio_file.type : "audio/mpeg"} />
                                         Trình duyệt không hỗ trợ audio.
                                     </audio>
                                 )}
